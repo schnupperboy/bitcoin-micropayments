@@ -33,16 +33,35 @@ fn main() {
     let tx_1 = tx.clone();
 
 
-    // request transactions from out bitcoin address
-    let message = Message::Text("{\"op\":\"addr_sub\", \"addr\":\"1MtD4wbHnfCtmSg7VFavmfChuWeRrSe9qX\"}".to_string());
-    match sender.send_message(message) {
-        Ok(()) => (),
-        Err(e) => {
-            println!("Send Loop: {:?}", e);
-            let _ = sender.send_message(Message::Close(None));
-            return;
+    let send_loop = thread::scoped(move || {
+        loop {
+            // Send loop
+            let message = match rx.recv() {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("Send Loop: {:?}", e);
+                    return;
+                }
+            };
+            match message {
+                Message::Close(_) => {
+                    let _ = sender.send_message(message);
+                    // If it's a close message, just send it and then return.
+                    return;
+                }
+                _ => (),
+            }
+            // Send the message
+            match sender.send_message(message) {
+                Ok(()) => (),
+                Err(e) => {
+                    println!("Send Loop: {:?}", e);
+                    let _ = sender.send_message(Message::Close(None));
+                    return;
+                }
+            }
         }
-    }
+    });
 
     let receive_loop = thread::scoped(move || {
         // Receive loop
@@ -74,11 +93,17 @@ fn main() {
             }
         }
     });
-    
+
+    // request transactions from out bitcoin address
+    let message = Message::Text("{\"op\":\"addr_sub\", \"addr\":\"1MtD4wbHnfCtmSg7VFavmfChuWeRrSe9qX\"}".to_string());
+    tx.send(message);
+
+
     // We're exiting
     
     println!("Waiting for child threads to exit");
 
+    let _ = send_loop.join();
     let _ = receive_loop.join();
     
     println!("Exited");
