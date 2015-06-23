@@ -2,3 +2,6 @@
 name = "cr-payment-bitcoin"
 version = "0.1.0"
 authors = ["Julius Naperkowski <jnaperkowski@sourcepark.de>"]
+
+[dependencies]
+websocket = "~0.12.1"
