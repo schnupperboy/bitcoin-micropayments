@@ -1,7 +1,12 @@
 #![feature(scoped)]
 
 extern crate websocket;
+extern crate rustc_serialize;
 
+mod blockchain_info;
+
+use blockchain_info::{Transaction};
+use rustc_serialize::json;
 
 fn main() {
     use std::thread;
@@ -88,8 +93,12 @@ fn main() {
                         return;
                     }
                 },
+
                 // Say what we received
-                _ => println!("Receive Loop: {:?}", message),
+                _ => {
+                    println!("Receive Loop: {:?}", message);
+                    let transaction: Transaction = json::decode(message).unwrap();
+                }
             }
         }
     });
