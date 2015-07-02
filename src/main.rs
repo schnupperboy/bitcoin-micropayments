@@ -1,11 +1,11 @@
-#![feature(scoped)]
+//#![feature(scoped)]
 
 extern crate websocket;
 extern crate rustc_serialize;
 
-mod blockchain_info;
+pub mod blockchain_info;
 
-use blockchain_info::{Transaction};
+use blockchain_info::*;
 use rustc_serialize::json;
 
 fn main() {
@@ -38,7 +38,7 @@ fn main() {
     let tx_1 = tx.clone();
 
 
-    let send_loop = thread::scoped(move || {
+    let send_loop = thread::spawn(move || {
         loop {
             // Send loop
             let message = match rx.recv() {
@@ -68,7 +68,7 @@ fn main() {
         }
     });
 
-    let receive_loop = thread::scoped(move || {
+    let receive_loop = thread::spawn(move || {
         // Receive loop
         for message in receiver.incoming_messages() {
             let message = match message {
@@ -93,18 +93,35 @@ fn main() {
                         return;
                     }
                 },
+                Message::Text(data) => {
+                    println!("Message: {}", data);
+                    let address_event: AddressEvent = match json::decode(&data) {
+                        Ok(ae) => ae,
+                        Err(e) => {
+                            println!("JSON Decoder: {}", e);
+                            return
+                        }
+                    };
+
+                    let transaction: Transaction = address_event.x;
+                    let transaction_output: &TransactionOutput = &transaction.out[0];
+                    println!("Received satoshis: {0}", &transaction_output.value);
+                }
 
                 // Say what we received
                 _ => {
-                    println!("Receive Loop: {:?}", message);
-                    let transaction: Transaction = json::decode(message).unwrap();
+                    println!("Receive Loop: unhandled websocket message: {}", message);
+                    //println!("Receive Loop: {:?}", message);
+                    //let address_event: AddressEvent = json::decode(message).unwrap();
                 }
             }
         }
     });
 
+    let json_msg = json::encode(&AddressSubscription::new("1MtD4wbHnfCtmSg7VFavmfChuWeRrSe9qX")).unwrap();
+
     // request transactions from out bitcoin address
-    let message = Message::Text("{\"op\":\"addr_sub\", \"addr\":\"1MtD4wbHnfCtmSg7VFavmfChuWeRrSe9qX\"}".to_string());
+    let message = Message::Text(json_msg);
     tx.send(message);
 
 

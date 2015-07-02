@@ -31,57 +31,58 @@
 
 use rustc_serialize::*;
 
-
 #[derive(RustcDecodable)]
-struct Transaction {
-	hash: String,
-	ver: u8,
-	vin_sz: u8,
-	vout_sz: u8,
-	lock_time: String,
-	size: u64,
-	relayed_by: String,
-	tx_index: u64,
-	time: u64,
-	inputs: Vec<TransactionInput>,
-	out: Vec<TransactionOutput>
-}
-
-#[derive(RustcEncodable, RustcDecodable)]
-struct TransactionOutput {
-	value: u64,
-	type_: u8,
-	addr: String
+pub struct AddressEvent {
+	pub op: String,
+	pub x: Transaction,
 }
 
 #[derive(RustcDecodable)]
-struct TransactionInput {
-	prev_out: TransactionOutput
+pub struct Transaction {
+	pub hash: String,
+	pub ver: u8,
+	pub vin_sz: u8,
+	pub vout_sz: u8,
+	pub lock_time: u64,
+	pub size: u64,
+	pub relayed_by: String,
+	pub tx_index: u64,
+	pub time: u64,
+	pub inputs: Vec<TransactionInput>,
+	pub out: Vec<TransactionOutput>
 }
 
-impl Decodable for Transaction {
-	fn decode<D: Decoder>(decoder: &mut D) -> Result<Transaction, D::Error> {
-		decoder.read_struct("root", 0, |decoder| {
+#[derive(RustcDecodable)]
+pub struct TransactionOutput {
+	pub value: u64,
+	//pub type_: u8, too lazy to write a custom decoder just because "type" appears to be a rust keyword
+	pub addr: String,
+	pub tx_index: u64,
+	pub spent: bool,
+	pub n: u32,
+	pub script: String,
+}
 
-			if decoder.read_struct_field("op", 0, |decoder| Decodable::decode(decoder)) != Some {
-				return Err("Ungültiges Feld \"op\"");
-			}
+#[derive(RustcDecodable)]
+pub struct TransactionInput {
+	pub prev_out: TransactionOutput,
+	pub sequence: u64,
+	pub script: String
+}
 
-			decoder.read_struct_field("x", 0, |decoder| {
-				Ok(Transaction{
-					hash: try!(decoder.read_struct_field("hash", 0, |decoder| Decodable::decode(decoder))),
-					ver: try!(decoder.read_struct_field("ver", 0, |decoder| Decodable::decode(decoder))),
-					vin_sz: try!(decoder.read_struct_field("vin_sz", 0, |decoder| Decodable::decode(decoder))),
-					vout_sz: try!(decoder.read_struct_field("vout_sz", 0, |decoder| Decodable::decode(decoder))),
-					lock_time: try!(decoder.read_struct_field("lock_time", 0, |decoder| Decodable::decode(decoder))),
-					size: try!(decoder.read_struct_field("size", 0, |decoder| Decodable::decode(decoder))),
-					relayed_by: try!(decoder.read_struct_field("relayed_by", 0, |decoder| Decodable::decode(decoder))),
-					tx_index: try!(decoder.read_struct_field("tx_index", 0, |decoder| Decodable::decode(decoder))),
-					time: try!(decoder.read_struct_field("time", 0, |decoder| Decodable::decode(decoder))),
-					inputs: try!(decoder.read_struct_field("inputs", 0, |decoder| Decodable::decode(decoder))),
-					output: try!(decoder.read_struct_field("output", 0, |decoder| Decodable::decode(decoder))),
-				})
-			})
-		})
+#[derive(RustcEncodable)]
+pub struct AddressSubscription<'a> {
+	op: &'a str,
+	addr: &'a str
+}
+
+const ADDRESS_SUBCRIPTION_OP: &'static str = "addr_sub";
+
+impl<'a> AddressSubscription<'a> {
+	pub fn new(address: &str) -> AddressSubscription {
+		AddressSubscription {
+			op: ADDRESS_SUBCRIPTION_OP,
+			addr: address
+		}
 	}
 }
