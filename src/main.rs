@@ -11,7 +11,6 @@ use rustc_serialize::json;
 fn main() {
     use std::thread;
     use std::sync::mpsc::channel;
-    use std::io::stdin;
 
     use websocket::{Message, Sender, Receiver};
     use websocket::client::request::Url;
@@ -37,6 +36,8 @@ fn main() {
 
     let tx_1 = tx.clone();
 
+    let bitcoin_address = "1MtD4wbHnfCtmSg7VFavmfChuWeRrSe9qX";
+    let bitcoin_amount = 1000; // satoshi
 
     let send_loop = thread::spawn(move || {
         loop {
@@ -69,6 +70,9 @@ fn main() {
     });
 
     let receive_loop = thread::spawn(move || {
+
+        let mut amount_payed = 0;
+
         // Receive loop
         for message in receiver.incoming_messages() {
             let message = match message {
@@ -85,16 +89,7 @@ fn main() {
                     let _ = tx_1.send(Message::Close(None));
                     return;
                 }
-                Message::Ping(data) => match tx_1.send(Message::Pong(data)) {
-                    // Send a pong in response
-                    Ok(()) => (),
-                    Err(e) => {
-                        println!("Receive Loop: {:?}", e);
-                        return;
-                    }
-                },
                 Message::Text(data) => {
-                    println!("Message: {}", data);
                     let address_event: AddressEvent = match json::decode(&data) {
                         Ok(ae) => ae,
                         Err(e) => {
@@ -104,25 +99,31 @@ fn main() {
                     };
 
                     let transaction: Transaction = address_event.x;
-                    let transaction_output: &TransactionOutput = &transaction.out[0];
-                    println!("Received satoshis: {0}", &transaction_output.value);
+
+                    for output in &transaction.out {
+                        if output.addr == bitcoin_address {
+                            println!("received {} satoshis from {}", output.value, &transaction.inputs[0].prev_out.addr);
+                            amount_payed = amount_payed + output.value;
+                        }
+                    }
+
+                    if amount_payed >= bitcoin_amount {
+                        println!("payment complete. exiting...");
+                        let _ = tx_1.send(Message::Close(None));
+                        return;
+                    }
                 }
 
-                // Say what we received
-                _ => {
-                    println!("Receive Loop: unhandled websocket message: {}", message);
-                    //println!("Receive Loop: {:?}", message);
-                    //let address_event: AddressEvent = json::decode(message).unwrap();
-                }
+                _ => println!("Receive Loop: unhandled websocket message: {:?}", message)
             }
         }
     });
 
-    let json_msg = json::encode(&AddressSubscription::new("1MtD4wbHnfCtmSg7VFavmfChuWeRrSe9qX")).unwrap();
+    let json_msg = json::encode(&AddressSubscription::new(bitcoin_address)).unwrap();
 
-    // request transactions from out bitcoin address
+    // request transactions from our bitcoin address
     let message = Message::Text(json_msg);
-    tx.send(message);
+    let _ = tx.send(message);
 
 
     // We're exiting
