@@ -1,4 +1,4 @@
-pub trait PaymentDetection {
-	fn new(address: &'static str, amount: u64) -> Self;
+pub trait PaymentDetection<'a> {
+	fn new(address: &'a str, amount: u64) -> Self;
 	fn wait(&self, );
 }

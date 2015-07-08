@@ -74,7 +74,7 @@ pub struct BlockchainInfo<'a> {
 
 const WEBSOCKET_URL: &'static str = "wss://ws.blockchain.info/inv";
 
-impl<'a> PaymentDetection for BlockchainInfo<'a> {
+impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 	fn new(address: &'a str, amount: u64) -> Self {
 		let address_subscription = AddressSubscription::new(address);
 		let json_request = json::encode(&address_subscription).unwrap();
