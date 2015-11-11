@@ -1,10 +1,12 @@
 use std::sync::mpsc::channel;
+use std::str::from_utf8;
 
 use rustc_serialize::*;
 
 use websocket::Message;
 use websocket::Sender as WebSocketSender;
 use websocket::Receiver as WebSocketReceiver;
+use websocket::message::Type;
 
 use payment_detection::PaymentDetection;
 
@@ -74,6 +76,13 @@ pub struct BlockchainInfo<'a> {
 
 const WEBSOCKET_URL: &'static str = "wss://ws.blockchain.info/inv";
 
+enum PaymentError {
+	InsufficientAmount,
+	Timeout,
+	InvalidJsonResponse,
+	WebSocketError
+}
+
 impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 	fn new(address: &'a str, amount: u64) -> Self {
 		let address_subscription = AddressSubscription::new(address);
@@ -87,7 +96,7 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 		}
 	}
 
-	fn wait(&self) {
+	fn wait(&self) -> Result<(), &'static str> {
 		use std::thread;
 
 		use websocket::Client;
@@ -114,29 +123,29 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 
 		let send_loop = thread::spawn(move || {
 			loop {
-				let message = match rx.recv() {
+				let message: Message = match rx.recv() {
 					Ok(m) => m,
 					Err(e) => {
 						println!("Send Loop: {:?}", e);
-						return;
+						return Err(PaymentError::InvalidJsonResponse);
 					}
 				};
 
-				match message {
-					Message::Close(_) => {
-					let _ = ws_sender.send_message(message);
+				match message.opcode {
+					Type::Close => {
+						let _ = ws_sender.send_message(&message);
 						// If it's a close message, just send it and then return.
-						return;
+						return Ok(());
 					}
 					_ => (),
 				}
 
-				match ws_sender.send_message(message) {
+				match ws_sender.send_message(&message) {
 					Ok(()) => (),
 					Err(e) => {
 						println!("Send Loop: {:?}", e);
-						let _ = ws_sender.send_message(Message::Close(None));
-						return;
+						let _ = ws_sender.send_message(&Message::close());
+						return Err(PaymentError::WebSocketError);
 					}
 				}
 			}
@@ -150,28 +159,38 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 			let mut amount_payed = 0;
 
 			for message in ws_receiver.incoming_messages() {
-				let message = match message {
+				let message: Message = match message {
 					Ok(m) => m,
 					Err(e) => {
 						println!("Receive Loop: {:?}", e);
-						let _ = tx.send(Message::Close(None));
+						let _ = tx.send(Message::close());
 						return;
+						//return Err(PaymentError::WebSocketError);
 					}
 				};
 
-				match message {
-					Message::Close(_) => {
+				match message.opcode {
+					Type::Close => {
 						// Got a close message, so send a close message and return
-						let _ = tx.send(Message::Close(None));
+						let _ = tx.send(Message::close());
 						return;
+						//return Err(PaymentError::Timeout);
 					}
 
-					Message::Text(data) => {
+					Type::Text => {
+						let data = from_utf8(&*message.payload);
+
+						let data = match data {
+					        Ok(v) => v,
+					        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+					    };
+
 						let address_event: AddressEvent = match json::decode(&data) {
 							Ok(ae) => ae,
 							Err(e) => {
 								println!("JSON Decoder: {}", e);
-								return
+								return;
+								//return Err(PaymentError::InvalidJsonResponse)
 							}
 						};
 
@@ -186,22 +205,38 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 
 						if amount_payed >= amount {
 							println!("payment complete. exiting...");
-							let _ = tx.send(Message::Close(None));
+							let _ = tx.send(Message::close());
 							return;
+							//return Ok(());
+						} else {
+							return;
+							//return Err(PaymentError::InsufficientAmount);
 						}
 					}
 
-					_ => println!("Receive Loop: unhandled websocket message: {:?}", message)
+					_ => {
+						println!("Receive Loop: unhandled websocket message: {:?}", message);
+						return;
+						//return Err(PaymentError::InvalidJsonResponse);
+					}
 				}
 			}
 		});
 
-		let _ = tx_1.send(Message::Text(websocket_msg));
+		let _ = tx_1.send(Message::text(websocket_msg));
 
 		println!("Waiting for child threads to exit");
 
 		let _ = send_loop.join();
-		let _ = receive_loop.join();
+		println!("send loop finished");
+
+		let r_result = receive_loop.join();
+		println!("receive loop finished");
+
+		match r_result {
+			Ok(_) => Ok(()),
+			Err(_) => Err("receive loop error {}")
+		}
 	}
 }
 
