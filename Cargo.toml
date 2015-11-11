@@ -7,3 +7,7 @@ authors = ["Julius Naperkowski <jnaperkowski@sourcepark.de>"]
 websocket = "0.13.1"
 rustc-serialize = "0.3.16"
 hyper = "0.6.15"
+image = "*"
+
+[dependencies.qrcode]
+git = "https://github.com/kennytm/qrcode-rust"
