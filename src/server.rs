@@ -5,7 +5,7 @@ use std::io::Read;
 
 use rustc_serialize::*;
 
-use hyper::{Post};
+use hyper::{Get, Post};
 use hyper::server::{Request, Response};
 use hyper::uri::RequestUri::AbsolutePath;
 use hyper::header::{ContentType};
@@ -13,6 +13,7 @@ use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 use payment_detection::PaymentDetection;
 use blockchain_info::*;
+use qr;
 
 
 macro_rules! try_return(
@@ -31,20 +32,30 @@ pub fn gen_resp_json(error: i64) -> Vec<u8> {
 	payment_response_json.as_bytes().to_vec()
 }
 
-pub fn detect_payment(mut req: Request, mut res: Response) {
-	match req.uri {
-		AbsolutePath(ref path) => match (&req.method, &path[..]) {
-			(&Post, "/detect_payment") => (), // fall through, fighting mutable borrows
-			_ => {
-				*res.status_mut() = hyper::NotFound;
-				return;
+pub fn routes(req: Request, res: Response) {
+	let handler: fn(Request, Response) = match req.uri {
+		AbsolutePath(ref path) => {
+			let url_path = path.split("?").next().unwrap();
+
+			match (&req.method, url_path) {
+				(&Post, "/detect_payment") => detect_payment,
+				(&Get, "/qr_code") => qr_code,
+				_ => not_found
 			}
 		},
-		_ => {
-			return;
-		}
+		_ => not_found
+		
 	};
 
+	handler(req, res);
+}
+
+pub fn not_found(_: Request, mut res: Response) {
+	*res.status_mut() = hyper::NotFound;
+	
+}
+
+pub fn detect_payment(mut req: Request, mut res: Response) {
 	res.headers_mut().set(
 		ContentType(
 			Mime(
@@ -83,6 +94,43 @@ pub fn detect_payment(mut req: Request, mut res: Response) {
 	};
 }
 
+pub fn qr_code(req: Request, mut res: Response) {
+	res.headers_mut().set(
+		ContentType(
+			Mime(
+				TopLevel::Image,
+				SubLevel::Png,
+				vec![(Attr::Charset, Value::Utf8)]
+			)
+		)
+	);
+
+	*res.status_mut() = hyper::Ok;
+
+	let uri: &str = match req.uri {
+		AbsolutePath(ref uri) => uri,
+		_ => {
+			*res.status_mut() = hyper::NotFound;
+			return
+		}
+	};
+
+	let re_btc_amount = regex!(r"[\?&]btc_amount=([0-9\.]+)");
+	let re_btc_receiver_address = regex!(r"[\?|&]btc_receiver_address=([0-9a-zA-Z]{26,34})");
+
+	let btc_amount_captures = re_btc_amount.captures(uri).unwrap();
+	let btc_amount = btc_amount_captures.at(1).unwrap();
+	
+	let btc_receiver_address_captures = re_btc_receiver_address.captures(uri).unwrap();
+	let btc_receiver_address = btc_receiver_address_captures.at(1).unwrap();
+
+	let bitcoin_payment_request = format!("bitcoin:{}?amount={}", btc_receiver_address, btc_amount);
+	
+	let png_data = qr::create(&bitcoin_payment_request);
+
+	try_return!(res.send(&png_data));
+}
+
 
 #[derive(RustcDecodable)]
 pub struct PaymentRequest {
@@ -102,5 +150,3 @@ impl<'a> PaymentResponse<'a> {
 		}
 	}
 }
-
-

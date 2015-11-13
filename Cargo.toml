@@ -8,6 +8,8 @@ websocket = "0.13.1"
 rustc-serialize = "0.3.16"
 hyper = "0.6.15"
 image = "*"
+regex = "0.1.41"
+regex_macros = "0.1.8"
 
 [dependencies.qrcode]
 git = "https://github.com/kennytm/qrcode-rust"
