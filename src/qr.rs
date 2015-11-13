@@ -23,9 +23,9 @@ pub fn create(content: &str) -> Vec<u8> {
 		let y_bit = (y / SCALE_FACTOR) as usize;
 
 		if code[(x_bit, y_bit)] {
-			Luma([255u8])
-		} else {
 			Luma([0u8])
+		} else {
+			Luma([255u8])
 		}
 	});
 
