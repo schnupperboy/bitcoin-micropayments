@@ -164,8 +164,7 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 					Err(e) => {
 						println!("Receive Loop: {:?}", e);
 						let _ = tx.send(Message::close());
-						return;
-						//return Err(PaymentError::WebSocketError);
+						panic!("Err(PaymentError::WebSocketError)")
 					}
 				};
 
@@ -173,8 +172,6 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 					Type::Close => {
 						// Got a close message, so send a close message and return
 						let _ = tx.send(Message::close());
-						return;
-						//return Err(PaymentError::Timeout);
 					}
 
 					Type::Text => {
@@ -182,15 +179,14 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 
 						let data = match data {
 					        Ok(v) => v,
-					        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+					        Err(e) => panic!("Invalid UTF-8 sequence: {}", e)
 					    };
 
 						let address_event: AddressEvent = match json::decode(&data) {
 							Ok(ae) => ae,
 							Err(e) => {
 								println!("JSON Decoder: {}", e);
-								return;
-								//return Err(PaymentError::InvalidJsonResponse)
+								panic!("Err(PaymentError::InvalidJsonResponse)");
 							}
 						};
 
@@ -207,17 +203,14 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 							println!("payment complete. exiting...");
 							let _ = tx.send(Message::close());
 							return;
-							//return Ok(());
 						} else {
-							return;
-							//return Err(PaymentError::InsufficientAmount);
+							panic!("Err(PaymentError::InsufficientAmount)");
 						}
 					}
 
 					_ => {
 						println!("Receive Loop: unhandled websocket message: {:?}", message);
-						return;
-						//return Err(PaymentError::InvalidJsonResponse);
+						panic!("Err(PaymentError::InvalidJsonResponse)");
 					}
 				}
 			}
