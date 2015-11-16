@@ -25,8 +25,8 @@ fn main() {
 	ip.push_str(&*env::args().nth(2).unwrap());
 
 
-    let server = Server::http(&*ip).unwrap();
-    let _guard = server.handle(routes);
-    
-    println!("Listening on http://{}", ip);
+	let server = Server::http(&*ip).unwrap();
+	let _guard = server.handle(routes);
+
+	println!("Listening on http://{}", ip);
 }
