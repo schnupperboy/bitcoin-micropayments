@@ -80,10 +80,10 @@ pub fn detect_payment(req: Request, mut res: Response) {
 
 	match blockchain_info.wait() {
 		Ok(_) => {
-			try_return!(res.send(&"payment received".as_bytes().to_vec()));
+			try_return!(res.send(&"Ok".as_bytes().to_vec()));
 		}
 		Err(e) => {
-			try_return!(res.send(&format!("payment not received in time {}", e).as_bytes().to_vec()));
+			try_return!(res.send(&format!("{:?}", e).as_bytes().to_vec()));
 		}
 	};
 }

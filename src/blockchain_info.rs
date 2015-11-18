@@ -1,4 +1,3 @@
-use std::sync::mpsc::channel;
 use std::str::from_utf8;
 
 use rustc_serialize::*;
@@ -7,8 +6,11 @@ use websocket::Message;
 use websocket::Sender as WebSocketSender;
 use websocket::Receiver as WebSocketReceiver;
 use websocket::message::Type;
+use websocket::Client;
+use websocket::client::request::Url;
+use websocket::result::WebSocketError;
 
-use payment_detection::PaymentDetection;
+use payment_detection::{PaymentDetection, PaymentError};
 
 
 #[derive(RustcDecodable)]
@@ -76,12 +78,6 @@ pub struct BlockchainInfo<'a> {
 
 const WEBSOCKET_URL: &'static str = "wss://ws.blockchain.info/inv";
 
-enum PaymentError {
-	InsufficientAmount,
-	Timeout,
-	InvalidJsonResponse,
-	WebSocketError
-}
 
 impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 	fn new(address: &'a str, amount: u64) -> Self {
@@ -96,12 +92,7 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 		}
 	}
 
-	fn wait(&self) -> Result<(), &'static str> {
-		use std::thread;
-
-		use websocket::Client;
-		use websocket::client::request::Url;
-
+	fn wait(&self) -> Result<(), PaymentError> {
 		let websocket_url = Url::parse(&self.websocket_url).unwrap();
 		println!("Connecting to {}", websocket_url);
 
@@ -109,127 +100,82 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 
 		let response = request.send().unwrap(); // Send the request and retrieve a response
 
-		println!("Validating response...");
-
-		response.validate().unwrap(); // Validate the response
+		let mut client = response.begin(); // Get a Client
 
 		println!("Successfully connected");
 
-		let (mut ws_sender, mut ws_receiver) = response.begin().split();
+		client.send_message(&Message::text(self.websocket_msg.to_string())).unwrap(); // Send message
 
-		let (tx, rx) = channel();
+		let mut amount_sum = 0;
+		for message in client.incoming_messages() {
+		    let message: Message = match message {
+		    	Ok(m) => m,
+		    	Err(e) => match e as WebSocketError {
+		    		WebSocketError::NoDataAvailable => return Err(PaymentError::Timeout),
+		    		_ => return Err(PaymentError::BackendError)
+		    	}
+		    };
 
-		let tx_1 = tx.clone();
-
-		let send_loop = thread::spawn(move || {
-			loop {
-				let message: Message = match rx.recv() {
-					Ok(m) => m,
-					Err(e) => {
-						println!("Send Loop: {:?}", e);
-						return Err(PaymentError::InvalidJsonResponse);
+			match message.opcode {
+				Type::Text => {
+					match incoming_amount(&*message.payload, &self.address.to_string()) {
+						Ok(amount) => {
+							amount_sum = amount_sum + amount;
+							if amount_sum >= self.amount {
+								println!("PAYMENT COMPLETE");
+								break;
+							}
+						},
+						Err(e) => return Err(e)
 					}
-				};
-
-				match message.opcode {
-					Type::Close => {
-						let _ = ws_sender.send_message(&message);
-						// If it's a close message, just send it and then return.
-						return Ok(());
-					}
-					_ => (),
 				}
 
-				match ws_sender.send_message(&message) {
-					Ok(()) => (),
-					Err(e) => {
-						println!("Send Loop: {:?}", e);
-						let _ = ws_sender.send_message(&Message::close());
-						return Err(PaymentError::WebSocketError);
+				Type::Close => {
+					if amount_sum > 0 {
+						return Err(PaymentError::InsufficientAmount);
+					} else {
+					    return Err(PaymentError::Timeout);
 					}
+				}
+
+				_ => {
+					println!("Backend error (unhandled websocket message): {:?}", message);
+					return Err(PaymentError::BackendError);
 				}
 			}
-		});
+		}
 
-		let address = self.address.to_string();
-		let amount = self.amount.clone();
-		let websocket_msg = self.websocket_msg.to_string().clone();
+		Ok(())
+	}
+}
 
-		let receive_loop = thread::spawn(move || {
-			let mut amount_payed = 0;
+fn incoming_amount(data: &[u8], address: &str) -> Result<u64, PaymentError> {
+	let data = match from_utf8(data) {
+        Ok(v) => v,
+        Err(e) => {
+        	println!("Backend error (UTF-8 decoding): {:?}", e);
+        	return Err(PaymentError::BackendError);
+        }
+    };
 
-			for message in ws_receiver.incoming_messages() {
-				let message: Message = match message {
-					Ok(m) => m,
-					Err(e) => {
-						println!("Receive Loop: {:?}", e);
-						let _ = tx.send(Message::close());
-						panic!("Err(PaymentError::WebSocketError)")
-					}
-				};
+	let address_event: AddressEvent = match json::decode(&data) {
+		Ok(ae) => ae,
+		Err(e) => {
+			println!("Backend error (JSON decoding): {:?}", e);
+			return Err(PaymentError::BackendError);
+		}
+	};
 
-				match message.opcode {
-					Type::Close => {
-						// Got a close message, so send a close message and return
-						let _ = tx.send(Message::close());
-					}
+	let transaction: Transaction = address_event.x;
 
-					Type::Text => {
-						let data = from_utf8(&*message.payload);
-
-						let data = match data {
-					        Ok(v) => v,
-					        Err(e) => panic!("Invalid UTF-8 sequence: {}", e)
-					    };
-
-						let address_event: AddressEvent = match json::decode(&data) {
-							Ok(ae) => ae,
-							Err(e) => {
-								println!("JSON Decoder: {}", e);
-								panic!("Err(PaymentError::InvalidJsonResponse)");
-							}
-						};
-
-						let transaction: Transaction = address_event.x;
-
-						for output in &transaction.out {
-							if output.addr == address {
-								println!("received {} satoshis from {}", output.value, &transaction.inputs[0].prev_out.addr);
-								amount_payed = amount_payed + output.value;
-							}
-						}
-
-						if amount_payed >= amount {
-							println!("payment complete. exiting...");
-							let _ = tx.send(Message::close());
-							return;
-						} else {
-							panic!("Err(PaymentError::InsufficientAmount)");
-						}
-					}
-
-					_ => {
-						println!("Receive Loop: unhandled websocket message: {:?}", message);
-						panic!("Err(PaymentError::InvalidJsonResponse)");
-					}
-				}
-			}
-		});
-
-		let _ = tx_1.send(Message::text(websocket_msg));
-
-		println!("Waiting for child threads to exit");
-
-		let _ = send_loop.join();
-		println!("send loop finished");
-
-		let r_result = receive_loop.join();
-		println!("receive loop finished");
-
-		match r_result {
-			Ok(_) => Ok(()),
-			Err(_) => Err("receive loop error {}")
+	let mut amount_payed = 0;
+	for output in &transaction.out {
+		if output.addr == address {
+			println!("received {} satoshis from {}", output.value, &transaction.inputs[0].prev_out.addr);
+			amount_payed = amount_payed + output.value;
 		}
 	}
+
+	Ok(amount_payed)
 }
 
