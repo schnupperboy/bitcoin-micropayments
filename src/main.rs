@@ -18,7 +18,7 @@ use std::process;
 
 use hyper::server::Server;
 
-use server::{routes};
+use server::routes;
 
 fn main() {
 	if env::args().count() != 2 {
@@ -26,13 +26,13 @@ fn main() {
 		process::exit(1);
 	}
 
-	let mut ip = env::args().nth(1).unwrap();
-	ip.push_str(":");
-	ip.push_str(&*env::args().nth(2).unwrap());
+	let mut sock_addr = env::args().nth(1).unwrap();
+	sock_addr.push_str(":");
+	sock_addr.push_str(&*env::args().nth(2).unwrap());
 
 
-	let server = Server::http(&*ip).unwrap();
+	let server = Server::http(&*sock_addr).unwrap();
 	let _guard = server.handle(routes);
 
-	println!("Listening on http://{}", ip);
+	println!("Listening on http://{}", sock_addr);
 }
