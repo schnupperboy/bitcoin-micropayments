@@ -92,44 +92,57 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 
 		let mut amount_sum = 0;
 		for message in client.incoming_messages() {
-		    let message: Message = match message {
-		    	Ok(m) => m,
-		    	Err(e) => match e as WebSocketError {
-		    		WebSocketError::NoDataAvailable => return Err(PaymentError::Timeout),
-		    		_ => return Err(PaymentError::BackendError)
-		    	}
-		    };
-
-			match message.opcode {
-				Type::Text => {
-					match incoming_amount(&*message.payload, &self.address.to_string()) {
-						Ok(amount) => {
-							amount_sum = amount_sum + amount;
-							if amount_sum >= self.amount {
-								println!("PAYMENT COMPLETE");
-								break;
-							}
-						},
-						Err(e) => return Err(e)
+			match handle_msg(&self, &message) {
+				Ok(incoming_amount) => {
+					amount_sum = amount_sum + incoming_amount;
+					if amount_sum >= self.amount {
+						println!("PAYMENT COMPLETE");
+						break;
 					}
 				}
 
-				Type::Close => {
-					if amount_sum > 0 {
-						return Err(PaymentError::InsufficientAmount);
-					} else {
-					    return Err(PaymentError::Timeout);
+				Err(e) => match e {
+					PaymentError::Timeout => {
+						if amount_sum > 0 {
+							return Err(PaymentError::InsufficientAmount);
+						} else {
+						    return Err(PaymentError::Timeout);
+						}
 					}
-				}
-
-				_ => {
-					println!("Backend error (unhandled websocket message): {:?}", message);
-					return Err(PaymentError::BackendError);
+					_ => return Err(e)
 				}
 			}
 		}
 
 		Ok(())
+	}
+}
+
+fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSocketError>) -> Result<u64, PaymentError> {
+    let message: &Message = match *message {
+    	Ok(ref m) => m,
+    	Err(ref e) => match e {
+    		&WebSocketError::NoDataAvailable => return Err(PaymentError::Timeout),
+    		_ => return Err(PaymentError::BackendError)
+    	}
+    };
+
+	match message.opcode {
+		Type::Text => {
+			match incoming_amount(&*message.payload, &blockchain_info.address.to_string()) {
+				Ok(amount) => Ok(amount),
+				Err(e) => Err(e)
+			}
+		}
+
+		Type::Close => {
+			Err(PaymentError::Timeout)
+		}
+
+		_ => {
+			println!("Backend error (unhandled websocket message): {:?}", message);
+			Err(PaymentError::BackendError)
+		}
 	}
 }
 
