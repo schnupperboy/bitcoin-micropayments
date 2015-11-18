@@ -129,10 +129,33 @@ fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSoc
 
 	match message.opcode {
 		Type::Text => {
-			match incoming_amount(&*message.payload, &blockchain_info.address.to_string()) {
-				Ok(amount) => Ok(amount),
-				Err(e) => Err(e)
+			let data = match from_utf8(&message.payload) {
+		        Ok(v) => v,
+		        Err(e) => {
+		        	println!("Backend error (UTF-8 decoding): {:?}", e);
+		        	return Err(PaymentError::BackendError);
+		        }
+		    };
+
+			let address_event: AddressEvent = match json::decode(&data) {
+				Ok(ae) => ae,
+				Err(e) => {
+					println!("Backend error (JSON decoding): {:?}", e);
+					return Err(PaymentError::BackendError);
+				}
+			};
+
+			let transaction: Transaction = address_event.x;
+
+			let mut amount_payed = 0;
+			for output in &transaction.out {
+				if output.addr == blockchain_info.address.to_string() {
+					println!("received {} satoshis from {}", output.value, &transaction.inputs[0].prev_out.addr);
+					amount_payed = amount_payed + output.value;
+				}
 			}
+
+			Ok(amount_payed)
 		}
 
 		Type::Close => {
@@ -145,34 +168,3 @@ fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSoc
 		}
 	}
 }
-
-fn incoming_amount(data: &[u8], address: &str) -> Result<u64, PaymentError> {
-	let data = match from_utf8(data) {
-        Ok(v) => v,
-        Err(e) => {
-        	println!("Backend error (UTF-8 decoding): {:?}", e);
-        	return Err(PaymentError::BackendError);
-        }
-    };
-
-	let address_event: AddressEvent = match json::decode(&data) {
-		Ok(ae) => ae,
-		Err(e) => {
-			println!("Backend error (JSON decoding): {:?}", e);
-			return Err(PaymentError::BackendError);
-		}
-	};
-
-	let transaction: Transaction = address_event.x;
-
-	let mut amount_payed = 0;
-	for output in &transaction.out {
-		if output.addr == address {
-			println!("received {} satoshis from {}", output.value, &transaction.inputs[0].prev_out.addr);
-			amount_payed = amount_payed + output.value;
-		}
-	}
-
-	Ok(amount_payed)
-}
-
