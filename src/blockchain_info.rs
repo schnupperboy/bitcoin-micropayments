@@ -1,4 +1,5 @@
 use std::str::from_utf8;
+use std::io::Read;
 
 use rustc_serialize::*;
 
@@ -10,7 +11,11 @@ use websocket::Client;
 use websocket::client::request::Url;
 use websocket::result::WebSocketError;
 
+use hyper::Client as HttpClient;
+use hyper::header::Connection;
+
 use payment_detection::{PaymentDetection, PaymentError};
+use exchange_rates::{EuroExchangeRate, ExchangeError};
 
 // For complete blockchain.info API see: https://blockchain.info/de/api/api_websocket
 
@@ -53,6 +58,16 @@ impl<'a> AddressSubscription<'a> {
 	}
 }
 
+#[derive(RustcDecodable)]
+struct ExchangeRates {
+	EUR: ExchangeRate,
+}
+
+#[derive(RustcDecodable)]
+struct ExchangeRate {
+	last: f64,
+}
+
 pub struct BlockchainInfo<'a> {
 	websocket_url: String,
 	websocket_msg: String,
@@ -61,6 +76,7 @@ pub struct BlockchainInfo<'a> {
 }
 
 const WEBSOCKET_URL: &'static str = "wss://ws.blockchain.info/inv";
+const EXCHANGE_RATE_URL: &'static str = "https://blockchain.info/de/ticker";
 
 
 impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
@@ -166,5 +182,33 @@ fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSoc
 			println!("Backend error (unhandled websocket message): {:?}", message);
 			Err(PaymentError::BackendError)
 		}
+	}
+}
+
+impl<'a> EuroExchangeRate for BlockchainInfo<'a> {
+	fn convert(euro: f64) -> Result<f64, ExchangeError> {
+	    // Create a client.
+	    let client = HttpClient::new();
+
+	    // Creating an outgoing request.
+	    let mut res = client.get(EXCHANGE_RATE_URL)
+	        // set a header
+	        .header(Connection::close())
+	        // let 'er go!
+	        .send().unwrap();
+
+	    // Read the Response.
+	    let mut body = String::new();
+	    res.read_to_string(&mut body).unwrap();
+
+		let exchange_rates: ExchangeRates = match json::decode(&body) {
+			Ok(er) => er,
+			Err(e) => {
+				println!("Backend error (JSON decoding): {:?}", e);
+				return Err(ExchangeError::BackendError);
+			}
+		};
+
+		Ok(euro/exchange_rates.EUR.last)
 	}
 }

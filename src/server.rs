@@ -8,7 +8,8 @@ use hyper::header::{ContentType};
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 
 use payment_detection::PaymentDetection;
-use blockchain_info::*;
+use exchange_rates::EuroExchangeRate;
+use blockchain_info::BlockchainInfo;
 use qr;
 
 
@@ -29,6 +30,7 @@ pub fn routes(req: Request, res: Response) {
 			match (&req.method, url_path) {
 				(&Get, "/detect_payment") => detect_payment,
 				(&Get, "/qr_code") => qr_code,
+				(&Get, "/exchange_rate") => exchange_rate,
 				_ => not_found
 			}
 		},
@@ -123,4 +125,42 @@ pub fn qr_code(req: Request, mut res: Response) {
 	*res.status_mut() = hyper::Ok;
 
 	try_return!(res.send(&png_data));
+}
+
+pub fn exchange_rate(req: Request, mut res: Response) {
+	res.headers_mut().set(
+		ContentType(
+			Mime(
+				TopLevel::Text,
+				SubLevel::Plain,
+				vec![(Attr::Charset, Value::Utf8)]
+			)
+		)
+	);
+
+	let uri: &str = match req.uri {
+		AbsolutePath(ref uri) => uri,
+		_ => {
+			*res.status_mut() = hyper::NotFound;
+			return
+		}
+	};
+
+	let re_eur_amount = regex!(r"[\?&]eur_amount=([0-9\.]+)");
+
+	let eur_amount_captures = re_eur_amount.captures(uri).unwrap();
+	let eur_amount_str = eur_amount_captures.at(1).unwrap();
+
+	let eur_amount = eur_amount_str.parse::<f64>().unwrap();
+
+	*res.status_mut() = hyper::Ok;
+
+	match BlockchainInfo::convert(eur_amount) {
+		Ok(btc_amount) => {
+			try_return!(res.send(&format!("{}", btc_amount).as_bytes().to_vec()));
+		}
+		Err(e) => {
+			try_return!(res.send(&format!("{:?}", e).as_bytes().to_vec()));
+		}
+	};
 }

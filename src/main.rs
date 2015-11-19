@@ -12,6 +12,7 @@ pub mod blockchain_info;
 pub mod payment_detection;
 pub mod server;
 pub mod qr;
+pub mod exchange_rates;
 
 use std::env;
 use std::process;
