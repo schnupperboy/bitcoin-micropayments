@@ -5,7 +5,6 @@ pub enum PaymentError {
 	BackendError
 }
 
-pub trait PaymentDetection<'a> {
-	fn new(address: &'a str, amount: u64) -> Self;
-	fn wait(&self, ) -> Result<(), PaymentError>;
+pub trait PaymentDetection {
+	fn await_payment(address: &str, amount: u64) -> Result<(), PaymentError>;
 }

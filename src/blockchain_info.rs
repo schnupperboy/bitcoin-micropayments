@@ -49,15 +49,6 @@ pub struct AddressSubscription<'a> {
 
 const ADDRESS_SUBCRIPTION_OP: &'static str = "addr_sub";
 
-impl<'a> AddressSubscription<'a> {
-	pub fn new(address: &str) -> AddressSubscription {
-		AddressSubscription {
-			op: ADDRESS_SUBCRIPTION_OP,
-			addr: address
-		}
-	}
-}
-
 #[derive(RustcDecodable)]
 struct ExchangeRates {
 	EUR: ExchangeRate,
@@ -68,33 +59,29 @@ struct ExchangeRate {
 	last: f64,
 }
 
-pub struct BlockchainInfo<'a> {
-	websocket_url: String,
-	websocket_msg: String,
-	address: &'a str,
-	amount: u64
-}
+pub struct BlockchainInfo;
 
 const WEBSOCKET_URL: &'static str = "wss://ws.blockchain.info/inv";
 const EXCHANGE_RATE_URL: &'static str = "https://blockchain.info/de/ticker";
 
+impl<'a> AddressSubscription<'a> {
+	pub fn new(address: &str) -> AddressSubscription {
+		AddressSubscription {
+			op: ADDRESS_SUBCRIPTION_OP,
+			addr: address
+		}
+	}
+}
 
-impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
-	fn new(address: &'a str, amount: u64) -> Self {
+impl PaymentDetection for BlockchainInfo {
+	fn await_payment(address: &str, amount: u64) -> Result<(), PaymentError> {
+		let target_amount = amount;
+
 		let address_subscription = AddressSubscription::new(address);
 		let json_request = json::encode(&address_subscription).unwrap();
 
-		BlockchainInfo {
-			websocket_url: WEBSOCKET_URL.to_string(),
-			websocket_msg: json_request,
-			address: &address,
-			amount: amount
-		}
-	}
-
-	fn wait(&self) -> Result<(), PaymentError> {
-		let websocket_url = Url::parse(&self.websocket_url).unwrap();
-		println!("Connecting to {}", websocket_url);
+		let websocket_url = Url::parse(WEBSOCKET_URL).unwrap();
+		println!("Connecting to {}", WEBSOCKET_URL);
 
 		let request = Client::connect(websocket_url).unwrap();
 
@@ -104,14 +91,14 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 
 		println!("Successfully connected");
 
-		client.send_message(&Message::text(self.websocket_msg.to_string())).unwrap(); // Send message
+		client.send_message(&Message::text(json_request.to_string())).unwrap(); // Send message
 
 		let mut amount_sum = 0;
 		for message in client.incoming_messages() {
-			match handle_msg(&self, &message) {
+			match handle_msg(address, &message) {
 				Ok(incoming_amount) => {
 					amount_sum = amount_sum + incoming_amount;
-					if amount_sum >= self.amount {
+					if amount_sum >= target_amount {
 						println!("PAYMENT COMPLETE");
 						break;
 					}
@@ -134,7 +121,7 @@ impl<'a> PaymentDetection<'a> for BlockchainInfo<'a> {
 	}
 }
 
-fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSocketError>) -> Result<u64, PaymentError> {
+fn handle_msg(address: &str, message: &Result<Message, WebSocketError>) -> Result<u64, PaymentError> {
     let message: &Message = match *message {
     	Ok(ref m) => m,
     	Err(ref e) => match e {
@@ -165,7 +152,7 @@ fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSoc
 
 			let mut amount_payed = 0;
 			for output in &transaction.out {
-				if output.addr == blockchain_info.address.to_string() {
+				if output.addr == address.to_string() {
 					println!("received {} satoshis from {}", output.value, &transaction.inputs[0].prev_out.addr);
 					amount_payed = amount_payed + output.value;
 				}
@@ -185,7 +172,7 @@ fn handle_msg(blockchain_info: &BlockchainInfo, message: &Result<Message, WebSoc
 	}
 }
 
-impl<'a> EuroExchangeRate for BlockchainInfo<'a> {
+impl EuroExchangeRate for BlockchainInfo {
 	fn convert(euro: f64) -> Result<f64, ExchangeError> {
 	    // Create a client.
 	    let client = HttpClient::new();

@@ -76,11 +76,9 @@ pub fn detect_payment(req: Request, mut res: Response) {
 
 	let btc_amount = btc_amount_str.parse::<f64>().unwrap();
 	let satoshi_amount = btc_amount * 1000.0 * 1000.0 * 100.0;
-	let blockchain_info = BlockchainInfo::new(btc_receiver_address, satoshi_amount as u64);
-
 	*res.status_mut() = hyper::Ok;
 
-	match blockchain_info.wait() {
+	match BlockchainInfo::await_payment(btc_receiver_address, satoshi_amount as u64) {
 		Ok(_) => {
 			try_return!(res.send(&"Ok".as_bytes().to_vec()));
 		}
