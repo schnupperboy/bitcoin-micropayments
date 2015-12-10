@@ -61,9 +61,9 @@ Only returns a response when the payment is complete, the time has expired or an
 **HTTP method:** `GET`
 **URL path:** `/detect_payment`
 **URL parameters:** `btc_amount` ("float" string), `btc_receiver_address` ("hex" string)
-**Response body:** `InsufficientAmount` or `Timeout` or `BackendError`
+**Response body:** `Ok` or `InsufficientAmount` or `Timeout` or `BackendError`
 
 ```
 $ curl 'http://127.0.0.1:5000/detect_payment?btc_amount=0.002&btc_receiver_address=13cSu17oJ2dFX5mTGeMTh8N3UTPv2pN5CZ'
-0.003926804366606456
+Ok
 ```
