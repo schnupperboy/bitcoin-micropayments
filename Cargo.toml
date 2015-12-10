@@ -1,5 +1,5 @@
 [package]
-name = "cr-payment-bitcoin"
+name = "bitcoin-micropayments"
 version = "0.1.0"
 authors = ["Julius Naperkowski <jnaperkowski@sourcepark.de>"]
 

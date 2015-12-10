@@ -23,7 +23,7 @@ use server::routes;
 
 fn main() {
 	if env::args().count() != 3 {
-		println!("Usage: cr-payment-bitcoin <ip-address> <port>");
+		println!("Usage: bitcoin-micropayments <ip-address> <port>");
 		process::exit(1);
 	}
 
