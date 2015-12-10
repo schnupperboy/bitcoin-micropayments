@@ -31,10 +31,11 @@ Listening on http://127.0.0.1:5000
 #### QR code
 Generates a QR code which can be scanned from a mobile Bitcoin Wallet app. It contains the amount of the transaction as well as the receiving Bitcoin address.
 
-**HTTP method:** `GET`
-**URL path:** `/qr_code`
-**URL parameters:** `btc_amount` ("float" string), btc_receiver_address ("hex" string)
+**HTTP method:** `GET`	
+**URL path:** `/qr_code`	
+**URL parameters:** `btc_amount` ("float" string), btc_receiver_address ("hex" string)	
 **Response body:** PNG data (MIME type: image/png)
+
 
 ```
 $ curl 'http://127.0.0.1:5000/qr_code?btc_amount=0.002&btc_receiver_address=13cSu17oJ2dFX5mTGeMTh8N3UTPv2pN5CZ'
@@ -45,10 +46,11 @@ In order to be able to show the price in your local currency on your frontend yo
 
 **NOTE:** Currently only Euro is the supported
 
-**HTTP method:** `GET`
-**URL path:** `/exchange_rate`
-**URL parameters:**`eur_amount` ("float" string) 
-**Response body:** corresponding amount in BTC amount
+**HTTP method:** `GET`	
+**URL path:** `/exchange_rate`	
+**URL parameters:**`eur_amount` ("float" string) 	
+**Response body:** corresponding amount in BTC amount	
+
 
 ```
 $ curl 'http://127.0.0.1:5000/exchange_rate?eur_amount=1.5'
@@ -58,10 +60,11 @@ $ curl 'http://127.0.0.1:5000/exchange_rate?eur_amount=1.5'
 #### Payment detection
 Only returns a response when the payment is complete, the time has expired or an internal error occurred  
 
-**HTTP method:** `GET`
-**URL path:** `/detect_payment`
-**URL parameters:** `btc_amount` ("float" string), `btc_receiver_address` ("hex" string)
-**Response body:** `Ok` or `InsufficientAmount` or `Timeout` or `BackendError`
+**HTTP method:** `GET`	
+**URL path:** `/detect_payment`		
+**URL parameters:** `btc_amount` ("float" string), `btc_receiver_address` ("hex" string)	
+**Response body:** `Ok` or `InsufficientAmount` or `Timeout` or `BackendError`	
+
 
 ```
 $ curl 'http://127.0.0.1:5000/detect_payment?btc_amount=0.002&btc_receiver_address=13cSu17oJ2dFX5mTGeMTh8N3UTPv2pN5CZ'
