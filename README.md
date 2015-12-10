@@ -16,11 +16,7 @@ $ cargo build
 
 ## Usage
 Run the executable by specifying an ip address and port to bind the HTTP server to.
-```
-$ bitcoin-micropayments <ip address> <port>
-```
 
-### Example
 ```
 $ bitcoin-micropayments 127.0.0.1 5000
 Listening on http://127.0.0.1:5000
