@@ -14,7 +14,7 @@ $ cd bitcoin-micropayments
 $ cargo build
 ```
 
-## Usage
+## Usage / HTTP interface
 Run the executable by specifying an ip address and port to bind the HTTP server to.
 
 ```
@@ -22,30 +22,28 @@ $ bitcoin-micropayments 127.0.0.1 5000
 Listening on http://127.0.0.1:5000
 ```
 
-### HTTP interface
-
-#### QR code
+### QR code
 Generates a QR code which can be scanned from a mobile Bitcoin Wallet app. It contains the amount of the transaction as well as the receiving Bitcoin address.
 
-**HTTP method:** `GET`	
-**URL path:** `/qr_code`	
-**URL parameters:** `btc_amount` ("float" string), btc_receiver_address ("hex" string)	
-**Response body:** PNG data (MIME type: image/png)
+#### HTTP method: `GET`
+#### URL path: `/qr_code`
+#### URL parameters: `btc_amount` ("float" string), btc_receiver_address ("hex" string)
+#### Response body: PNG data (MIME type: image/png)
 
 
 ```
 $ curl 'http://127.0.0.1:5000/qr_code?btc_amount=0.002&btc_receiver_address=13cSu17oJ2dFX5mTGeMTh8N3UTPv2pN5CZ'
 ```
 
-#### Exchange rate
+### Exchange rate
 In order to be able to show the price in your local currency on your frontend you can convert to the current Bitcoin prize.
 
 **NOTE:** Currently only Euro is the supported
 
-**HTTP method:** `GET`	
-**URL path:** `/exchange_rate`	
-**URL parameters:**`eur_amount` ("float" string) 	
-**Response body:** corresponding amount in BTC amount	
+#### HTTP method: `GET`
+#### URL path: `/exchange_rate`
+#### URL parameters: `eur_amount` ("float" string) 
+#### Response body: corresponding amount in BTC amount
 
 
 ```
@@ -53,13 +51,13 @@ $ curl 'http://127.0.0.1:5000/exchange_rate?eur_amount=1.5'
 0.003926804366606456
 ```
 
-#### Payment detection
+### Payment detection
 Only returns a response when the payment is complete, the time has expired or an internal error occurred  
 
-**HTTP method:** `GET`	
-**URL path:** `/detect_payment`		
-**URL parameters:** `btc_amount` ("float" string), `btc_receiver_address` ("hex" string)	
-**Response body:** `Ok` or `InsufficientAmount` or `Timeout` or `BackendError`	
+#### HTTP method: `GET`	
+#### URL path: `/detect_payment`		
+#### URL parameters: `btc_amount` ("float" string), `btc_receiver_address` ("hex" string)	
+#### Response body: `Ok` or `InsufficientAmount` or `Timeout` or `BackendError`	
 
 
 ```
